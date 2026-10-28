@@ -2,16 +2,15 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="8dp">
+    android:orientation="vertical">
 
-    <!-- Top Controls -->
+    <!-- Top Controls (Will hide automatically when a game is running) -->
     <LinearLayout
+        android:id="@+id/topBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+        android:padding="8dp">
 
         <Button
             android:id="@+id/btnToggleView"
@@ -42,7 +41,7 @@
         android:padding="12dp"
         android:hint="// Write mini-app code here" />
 
-    <!-- Mini-App Sandbox View (hidden while editing) -->
+    <!-- Full-Screen Game & App Canvas -->
     <WebView
         android:id="@+id/miniAppWebView"
         android:layout_width="match_parent"
