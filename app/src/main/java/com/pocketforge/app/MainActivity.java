@@ -19,8 +19,10 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -28,32 +30,64 @@ import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
 
+    private LinearLayout topBarLayout;
     private EditText codeEditor;
     private WebView miniAppWebView;
     private Button btnToggleView;
     private Button btnInstallShortcut;
     private boolean isRunning = false;
 
-    // Starter template for new mini-apps
-    private static final String DEFAULT_APP_CODE = 
-        "// Welcome to PocketForge!\n" +
-        "PocketForge.addText('Hello from your mini-app!');\n\n" +
-        "var myInput = PocketForge.addInput('Type your name here');\n\n" +
-        "PocketForge.addButton('Greet Me', function() {\n" +
-        "    PocketForge.addText('Hello, ' + myInput.value + '!');\n" +
-        "});\n";
+    // Starter template: An interactive full-screen bouncing ball game!
+    private static final String DEFAULT_APP_CODE =
+        "// Full-Screen Game Demo in PocketForge!\n" +
+        "const canvas = PocketForge.createCanvas();\n" +
+        "const ctx = canvas.getContext('2d');\n" +
+        "\n" +
+        "let x = canvas.width / 2;\n" +
+        "let y = canvas.height / 2;\n" +
+        "let dx = 4;\n" +
+        "let dy = 4;\n" +
+        "let radius = 25;\n" +
+        "let color = '#2196F3';\n" +
+        "\n" +
+        "// Change ball color on screen tap\n" +
+        "canvas.addEventListener('touchstart', (e) => {\n" +
+        "    color = '#' + Math.floor(Math.random()*16777215).toString(16);\n" +
+        "});\n" +
+        "\n" +
+        "function gameLoop() {\n" +
+        "    ctx.clearRect(0, 0, canvas.width, canvas.height);\n" +
+        "    \n" +
+        "    // Draw ball\n" +
+        "    ctx.beginPath();\n" +
+        "    ctx.arc(x, y, radius, 0, Math.PI * 2);\n" +
+        "    ctx.fillStyle = color;\n" +
+        "    ctx.fill();\n" +
+        "    ctx.closePath();\n" +
+        "    \n" +
+        "    // Bounce off walls\n" +
+        "    if (x + dx > canvas.width - radius || x + dx < radius) dx = -dx;\n" +
+        "    if (y + dy > canvas.height - radius || y + dy < radius) dy = -dy;\n" +
+        "    x += dx;\n" +
+        "    y += dy;\n" +
+        "    \n" +
+        "    requestAnimationFrame(gameLoop);\n" +
+        "}\n" +
+        "gameLoop();\n";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        topBarLayout = findViewById(R.id.topBarLayout);
         codeEditor = findViewById(R.id.codeEditor);
         miniAppWebView = findViewById(R.id.miniAppWebView);
         btnToggleView = findViewById(R.id.btnToggleView);
         btnInstallShortcut = findViewById(R.id.btnInstallShortcut);
 
         setupSandboxWebView();
+        setupBackNavigation();
 
         codeEditor.setText(DEFAULT_APP_CODE);
 
@@ -67,7 +101,6 @@ public class MainActivity extends AppCompatActivity {
 
         btnInstallShortcut.setOnClickListener(v -> showInstallDialog());
 
-        // Check if PocketForge was opened from an installed home-screen shortcut
         String launchedCode = getIntent().getStringExtra("EXTRA_MINI_APP_CODE");
         if (launchedCode != null && !launchedCode.isEmpty()) {
             codeEditor.setText(launchedCode);
@@ -75,42 +108,69 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void setupBackNavigation() {
+        // Pressing your phone's Back button exits the game and returns to Editor
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (isRunning) {
+                    switchToEditor();
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
+    }
+
     private void setupSandboxWebView() {
         WebSettings settings = miniAppWebView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
+        settings.setDomStorageEnabled(true);
 
-        // Block external navigation so scripts stay inside the sandbox
         miniAppWebView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return true; 
+                return true;
             }
         });
     }
 
     private void runMiniApp(String jsCode) {
         isRunning = true;
+        
+        // Hide editor AND top buttons for total full-screen immersion
+        topBarLayout.setVisibility(View.GONE);
         codeEditor.setVisibility(View.GONE);
         miniAppWebView.setVisibility(View.VISIBLE);
-        btnToggleView.setText("Edit Code");
 
-        // Safely base64 encode user code to avoid quoting issues
+        Toast.makeText(this, "Tap phone Back button to exit", Toast.LENGTH_SHORT).show();
+
         String encodedCode = Base64.encodeToString(jsCode.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
 
         String html = "<!DOCTYPE html><html><head>" +
-                "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                "<meta name='viewport' content='width=device-width, initial-scale=1.0, user-scalable=no'>" +
                 "<style>" +
-                "  body { font-family: sans-serif; padding: 16px; margin: 0; background: #FFF; }" +
-                "  #root { display: flex; flex-direction: column; gap: 12px; }" +
+                "  html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; color: #FFF; font-family: sans-serif; }" +
+                "  #root { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 8px; box-sizing: border-box; }" +
+                "  canvas { display: block; width: 100%; height: 100%; touch-action: none; }" +
                 "  button { padding: 12px; font-size: 16px; border: none; border-radius: 8px; background: #2196F3; color: white; }" +
                 "  input { padding: 12px; font-size: 16px; border: 1px solid #CCC; border-radius: 8px; }" +
-                "  p { font-size: 16px; margin: 0; color: #222; word-break: break-word; }" +
+                "  p { font-size: 16px; margin: 0; }" +
                 "</style></head><body>" +
                 "<div id='root'></div>" +
                 "<script>" +
                 "  const PocketForge = {" +
+                "    createCanvas: function() {" +
+                "      document.getElementById('root').style.padding = '0';" +
+                "      const c = document.createElement('canvas');" +
+                "      c.width = window.innerWidth;" +
+                "      c.height = window.innerHeight;" +
+                "      document.getElementById('root').appendChild(c);" +
+                "      return c;" +
+                "    }," +
                 "    addText: function(msg) {" +
                 "      const p = document.createElement('p');" +
                 "      p.textContent = msg;" +
@@ -145,6 +205,7 @@ public class MainActivity extends AppCompatActivity {
     private void switchToEditor() {
         isRunning = false;
         miniAppWebView.setVisibility(View.GONE);
+        topBarLayout.setVisibility(View.VISIBLE);
         codeEditor.setVisibility(View.VISIBLE);
         btnToggleView.setText("Run Mini-App");
     }
@@ -192,14 +253,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Creates a custom circular icon with the app's first initial
     private Bitmap generateCustomIcon(String title) {
         int size = 192;
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
 
         Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bgPaint.setColor(Color.parseColor("#4CAF50")); // Emerald Green
+        bgPaint.setColor(Color.parseColor("#4CAF50"));
         canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint);
 
         Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -214,4 +274,4 @@ public class MainActivity extends AppCompatActivity {
 
         return bitmap;
     }
-    }
+        }
