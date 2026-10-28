@@ -1,8 +1,10 @@
 package com.pocketforge.app;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -11,6 +13,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Base64;
 import android.view.View;
 import android.webkit.WebResourceRequest;
@@ -20,6 +24,8 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -30,66 +36,55 @@ import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
 
+    private RelativeLayout rootLayout;
     private LinearLayout topBarLayout;
+    private TextView tvAppTitle;
     private EditText codeEditor;
     private WebView miniAppWebView;
     private Button btnToggleView;
+    private Button btnTheme;
     private Button btnInstallShortcut;
-    private boolean isRunning = false;
 
-    // Starter template: An interactive full-screen bouncing ball game!
-    private static final String DEFAULT_APP_CODE =
-        "// Full-Screen Game Demo in PocketForge!\n" +
-        "const canvas = PocketForge.createCanvas();\n" +
-        "const ctx = canvas.getContext('2d');\n" +
-        "\n" +
-        "let x = canvas.width / 2;\n" +
-        "let y = canvas.height / 2;\n" +
-        "let dx = 4;\n" +
-        "let dy = 4;\n" +
-        "let radius = 25;\n" +
-        "let color = '#2196F3';\n" +
-        "\n" +
-        "// Change ball color on screen tap\n" +
-        "canvas.addEventListener('touchstart', (e) => {\n" +
-        "    color = '#' + Math.floor(Math.random()*16777215).toString(16);\n" +
-        "});\n" +
-        "\n" +
-        "function gameLoop() {\n" +
-        "    ctx.clearRect(0, 0, canvas.width, canvas.height);\n" +
-        "    \n" +
-        "    // Draw ball\n" +
-        "    ctx.beginPath();\n" +
-        "    ctx.arc(x, y, radius, 0, Math.PI * 2);\n" +
-        "    ctx.fillStyle = color;\n" +
-        "    ctx.fill();\n" +
-        "    ctx.closePath();\n" +
-        "    \n" +
-        "    // Bounce off walls\n" +
-        "    if (x + dx > canvas.width - radius || x + dx < radius) dx = -dx;\n" +
-        "    if (y + dy > canvas.height - radius || y + dy < radius) dy = -dy;\n" +
-        "    x += dx;\n" +
-        "    y += dy;\n" +
-        "    \n" +
-        "    requestAnimationFrame(gameLoop);\n" +
-        "}\n" +
-        "gameLoop();\n";
+    private boolean isRunning = false;
+    private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        prefs = getSharedPreferences("PocketForgePrefs", MODE_PRIVATE);
+
+        rootLayout = findViewById(R.id.rootLayout);
         topBarLayout = findViewById(R.id.topBarLayout);
+        tvAppTitle = findViewById(R.id.tvAppTitle);
         codeEditor = findViewById(R.id.codeEditor);
         miniAppWebView = findViewById(R.id.miniAppWebView);
         btnToggleView = findViewById(R.id.btnToggleView);
+        btnTheme = findViewById(R.id.btnTheme);
         btnInstallShortcut = findViewById(R.id.btnInstallShortcut);
 
         setupSandboxWebView();
         setupBackNavigation();
 
-        codeEditor.setText(DEFAULT_APP_CODE);
+        // Load saved code (blank by default, no example code)
+        String savedCode = prefs.getString("saved_code", "");
+        codeEditor.setText(savedCode);
+
+        // Auto-save whatever you type
+        codeEditor.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) {
+                prefs.edit().putString("saved_code", s.toString()).apply();
+            }
+        });
+
+        // Apply saved theme
+        int savedTheme = prefs.getInt("app_theme", 0);
+        applyTheme(savedTheme);
+
+        btnTheme.setOnClickListener(v -> showThemeDialog());
 
         btnToggleView.setOnClickListener(v -> {
             if (isRunning) {
@@ -101,6 +96,7 @@ public class MainActivity extends AppCompatActivity {
 
         btnInstallShortcut.setOnClickListener(v -> showInstallDialog());
 
+        // Launch directly if opened from home screen icon
         String launchedCode = getIntent().getStringExtra("EXTRA_MINI_APP_CODE");
         if (launchedCode != null && !launchedCode.isEmpty()) {
             codeEditor.setText(launchedCode);
@@ -108,8 +104,65 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void showThemeDialog() {
+        String[] themes = {"Midnight Slate (Default)", "Cyberpunk Neon", "Clean Light"};
+        int currentTheme = prefs.getInt("app_theme", 0);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Select App Look")
+                .setSingleChoiceItems(themes, currentTheme, (dialog, which) -> {
+                    prefs.edit().putInt("app_theme", which).apply();
+                    applyTheme(which);
+                    dialog.dismiss();
+                })
+                .show();
+    }
+
+    private void applyTheme(int themeIndex) {
+        if (themeIndex == 1) {
+            // Cyberpunk Neon
+            rootLayout.setBackgroundColor(Color.parseColor("#050811"));
+            topBarLayout.setBackgroundColor(Color.parseColor("#050811"));
+            tvAppTitle.setTextColor(Color.parseColor("#00E5FF"));
+            codeEditor.setBackgroundColor(Color.parseColor("#0A0F1D"));
+            codeEditor.setTextColor(Color.parseColor("#00FF66"));
+            codeEditor.setHintTextColor(Color.parseColor("#37474F"));
+            btnTheme.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#152238")));
+            btnInstallShortcut.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#152238")));
+            btnToggleView.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#00E5FF")));
+            btnToggleView.setTextColor(Color.parseColor("#000000"));
+        } else if (themeIndex == 2) {
+            // Clean Light
+            rootLayout.setBackgroundColor(Color.parseColor("#F3F4F6"));
+            topBarLayout.setBackgroundColor(Color.parseColor("#FFFFFF"));
+            tvAppTitle.setTextColor(Color.parseColor("#111827"));
+            codeEditor.setBackgroundColor(Color.parseColor("#FFFFFF"));
+            codeEditor.setTextColor(Color.parseColor("#1F2937"));
+            codeEditor.setHintTextColor(Color.parseColor("#9CA3AF"));
+            btnTheme.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#E5E7EB")));
+            btnTheme.setTextColor(Color.parseColor("#374151"));
+            btnInstallShortcut.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#E5E7EB")));
+            btnInstallShortcut.setTextColor(Color.parseColor("#374151"));
+            btnToggleView.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#2563EB")));
+            btnToggleView.setTextColor(Color.parseColor("#FFFFFF"));
+        } else {
+            // Midnight Slate (Default)
+            rootLayout.setBackgroundColor(Color.parseColor("#121318"));
+            topBarLayout.setBackgroundColor(Color.parseColor("#121318"));
+            tvAppTitle.setTextColor(Color.parseColor("#FFFFFF"));
+            codeEditor.setBackgroundColor(Color.parseColor("#1A1C23"));
+            codeEditor.setTextColor(Color.parseColor("#F3F4F6"));
+            codeEditor.setHintTextColor(Color.parseColor("#6B7280"));
+            btnTheme.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#242630")));
+            btnTheme.setTextColor(Color.parseColor("#D1D5DB"));
+            btnInstallShortcut.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#242630")));
+            btnInstallShortcut.setTextColor(Color.parseColor("#D1D5DB"));
+            btnToggleView.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#6366F1")));
+            btnToggleView.setTextColor(Color.parseColor("#FFFFFF"));
+        }
+    }
+
     private void setupBackNavigation() {
-        // Pressing your phone's Back button exits the game and returns to Editor
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -140,24 +193,22 @@ public class MainActivity extends AppCompatActivity {
 
     private void runMiniApp(String jsCode) {
         isRunning = true;
-        
-        // Hide editor AND top buttons for total full-screen immersion
         topBarLayout.setVisibility(View.GONE);
         codeEditor.setVisibility(View.GONE);
         miniAppWebView.setVisibility(View.VISIBLE);
 
-        Toast.makeText(this, "Tap phone Back button to exit", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Swipe or tap Back to return", Toast.LENGTH_SHORT).show();
 
         String encodedCode = Base64.encodeToString(jsCode.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
 
         String html = "<!DOCTYPE html><html><head>" +
                 "<meta name='viewport' content='width=device-width, initial-scale=1.0, user-scalable=no'>" +
                 "<style>" +
-                "  html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; color: #FFF; font-family: sans-serif; }" +
-                "  #root { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 8px; box-sizing: border-box; }" +
+                "  html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #0E0E10; color: #FFF; font-family: sans-serif; }" +
+                "  #root { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; box-sizing: border-box; }" +
                 "  canvas { display: block; width: 100%; height: 100%; touch-action: none; }" +
-                "  button { padding: 12px; font-size: 16px; border: none; border-radius: 8px; background: #2196F3; color: white; }" +
-                "  input { padding: 12px; font-size: 16px; border: 1px solid #CCC; border-radius: 8px; }" +
+                "  button { padding: 12px; font-size: 16px; border: none; border-radius: 8px; background: #6366F1; color: white; }" +
+                "  input { padding: 12px; font-size: 16px; border: 1px solid #333; border-radius: 8px; background: #1C1C22; color: #FFF; }" +
                 "  p { font-size: 16px; margin: 0; }" +
                 "</style></head><body>" +
                 "<div id='root'></div>" +
@@ -207,7 +258,6 @@ public class MainActivity extends AppCompatActivity {
         miniAppWebView.setVisibility(View.GONE);
         topBarLayout.setVisibility(View.VISIBLE);
         codeEditor.setVisibility(View.VISIBLE);
-        btnToggleView.setText("Run Mini-App");
     }
 
     private void showInstallDialog() {
@@ -244,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
                         .build();
 
                 shortcutManager.requestPinShortcut(pinShortcutInfo, null);
-                Toast.makeText(this, "Shortcut requested! Check your Home Screen.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Shortcut added to Home Screen!", Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(this, "Launcher doesn't support pin shortcuts", Toast.LENGTH_SHORT).show();
             }
@@ -259,7 +309,7 @@ public class MainActivity extends AppCompatActivity {
         Canvas canvas = new Canvas(bitmap);
 
         Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bgPaint.setColor(Color.parseColor("#4CAF50"));
+        bgPaint.setColor(Color.parseColor("#6366F1")); // Indigo Accent
         canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint);
 
         Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -274,4 +324,4 @@ public class MainActivity extends AppCompatActivity {
 
         return bitmap;
     }
-        }
+}
